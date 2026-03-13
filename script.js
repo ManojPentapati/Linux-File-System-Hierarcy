@@ -393,19 +393,36 @@ function highlightNode(name) {
   showPanel(name, nodeInfo[name]?.tagColor || '#00d4ff');
   updateBreadcrumb(name);
   markExplored(name);
-  expandAll();
-  // Update URL hash
   window.location.hash = encodeURIComponent(name);
+
+  // Only open the path to this specific node — never touch other branches
+  function expandPathTo(node, targetName) {
+    if (!node) return false;
+    if (node.data.name === targetName) return true;
+    // Check hidden children first
+    const kids = node.children || node._children;
+    if (!kids) return false;
+    for (const child of kids) {
+      if (expandPathTo(child, targetName)) {
+        // This child is on the path — make sure it's visible
+        if (node._children) { node.children = node._children; node._children = null; }
+        return true;
+      }
+    }
+    return false;
+  }
+  expandPathTo(root, name);
+  update(root);
+
   setTimeout(() => {
     g.selectAll('.node').each(function(d) {
       if (d.data.name === name) {
-        const transform = d3.zoomIdentity.translate(svgW/2 - d.x, 180 - d.y).scale(1.3);
-        svg.transition().duration(600).call(zoom.transform, transform);
+        focusedNode = d;
         d3.select(this).classed('focused', true);
         setTimeout(() => d3.select(this).classed('focused', false), 1500);
       }
     });
-  }, 400);
+  }, 450);
 }
 
 // ── URL Hash Routing ───────────────────────────────────────────
@@ -453,50 +470,87 @@ const svgH = 700;
 const svg = d3.select("#svg-container")
   .append("svg").attr("width", svgW).attr("height", svgH);
 
-const g = svg.append("g");
+const g = svg.append("g").attr("transform", "translate(0, 20)");
 
-const zoom = d3.zoom().scaleExtent([0.2, 3])
-  .on("zoom", e => g.attr("transform", e.transform));
-svg.call(zoom);
+// Disable all pan/zoom — tree is fully fixed
+svg.on("mousedown.zoom", null)
+   .on("touchstart.zoom", null)
+   .on("touchmove.zoom", null)
+   .on("touchend.zoom", null)
+   .on("wheel.zoom", null)
+   .on("dblclick.zoom", null);
 
-const treeLayout = d3.tree().size([svgW - 100, svgH - 160]);
+// Use nodeSize for guaranteed fixed spacing — no collisions ever
+const treeLayout = d3.tree().nodeSize([90, 160]);
 let root = d3.hierarchy(treeData);
-root.x0 = svgW / 2;
+root.x0 = 0;
 root.y0 = 0;
 
-root.children && root.children.forEach(d => {
-  if (d.children) { d._children = d.children; d.children = null; }
-});
+// Collapse EVERYTHING — only root is visible at start
+function collapseNode(d) {
+  if (d.children) {
+    d._children = d.children;
+    d.children = null;
+    d._children.forEach(collapseNode);
+  }
+}
+root.children && root.children.forEach(collapseNode);
 
 let nodeId = 0;
-let focusedNode = null; // for keyboard nav
+let focusedNode = null;
 
 // ── Update / Render ────────────────────────────────────────────
 function update(source) {
   const treeNodes = treeLayout(root);
   const nodes = treeNodes.descendants();
   const links = treeNodes.links();
-  nodes.forEach(d => { d.y = d.depth * 130 + 60; });
+
+  // Center tree horizontally in SVG
+  const xs = nodes.map(d => d.x);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const treeWidth = maxX - minX;
+  const offsetX = svgW / 2 - minX - treeWidth / 2;
+
+  // Fix vertical depth spacing
+  nodes.forEach(d => { d.y = d.depth * 160 + 60; });
+
+  // Dynamically grow SVG height to fit all nodes
+  const maxY = Math.max(...nodes.map(d => d.y)) + 100;
+  svg.attr("height", Math.max(svgH, maxY));
 
   // Links
   const link = g.selectAll(".link").data(links, d => d.target.id);
   const linkEnter = link.enter().insert("path","g")
     .attr("class","link")
     .attr("stroke", d => d.target.data.color || "#2a4a6a")
-    .attr("d", () => { const o={x:source.x0,y:source.y0}; return diag(o,o); });
-  linkEnter.merge(link).transition().duration(350)
-    .attr("d", d => diag(d.source, d.target))
+    .attr("d", () => {
+      const o = { x: source.x0 + offsetX, y: source.y0 };
+      return diag(o, o);
+    });
+  linkEnter.merge(link).transition().duration(400)
+    .attr("d", d => diag(
+      { x: d.source.x + offsetX, y: d.source.y },
+      { x: d.target.x + offsetX, y: d.target.y }
+    ))
     .attr("stroke", d => d.target.data.color || "#2a4a6a");
-  link.exit().transition().duration(350)
-    .attr("d", () => { const o={x:source.x,y:source.y}; return diag(o,o); }).remove();
+  link.exit().transition().duration(400)
+    .attr("d", () => {
+      const o = { x: source.x + offsetX, y: source.y };
+      return diag(o, o);
+    }).remove();
 
   // Nodes
   const node = g.selectAll(".node").data(nodes, d => d.id || (d.id = ++nodeId));
   const nodeEnter = node.enter().append("g")
     .attr("class","node")
-    .attr("transform", () => `translate(${source.x0},${source.y0})`)
+    .attr("transform", () => `translate(${source.x0 + offsetX},${source.y0})`)
     .on("click", (e, d) => {
-      toggleNode(d);
+      // Toggle children on click
+      if (d._children || d.children) {
+        if (d.children) { d._children = d.children; d.children = null; }
+        else             { d.children = d._children; d._children = null; }
+        update(d);
+      }
       showPanel(d.data.name, d.data.color);
       updateBreadcrumb(d.data.name);
       markExplored(d.data.name);
@@ -506,37 +560,40 @@ function update(source) {
     });
 
   nodeEnter.filter(d => d.depth === 0).append("circle")
-    .attr("class","node-root-ring").attr("r",30);
+    .attr("class","node-root-ring").attr("r", 30);
 
   nodeEnter.append("circle")
-    .attr("r",0)
-    .attr("fill", d => d._children ? d.data.color+"30" : "#0d1829")
+    .attr("r", 0)
+    .attr("fill", d => d._children ? d.data.color + "30" : "#0d1829")
     .attr("stroke", d => d.data.color)
-    .style("filter", d => `drop-shadow(0 0 5px ${d.data.color}88)`);
+    .style("filter", d => `drop-shadow(0 0 6px ${d.data.color}99)`);
 
   nodeEnter.append("text")
-    .attr("dy", d => d.depth===0 ? -18 : (d.children||d._children ? -16 : 18))
-    .attr("text-anchor","middle")
+    .attr("text-anchor", "middle")
     .attr("fill", d => d.data.color)
-    .attr("font-size", d => d.depth===0 ? "13px" : "11px")
-    .attr("font-weight","700")
+    .attr("font-size", d => d.depth === 0 ? "13px" : "11px")
+    .attr("font-weight", "700")
     .text(d => d.data.name)
-    .attr("opacity",0);
+    .attr("opacity", 0);
 
   const nodeUpdate = nodeEnter.merge(node);
-  nodeUpdate.transition().duration(350).attr("transform", d => `translate(${d.x},${d.y})`);
-  nodeUpdate.select("circle:not(.node-root-ring)").transition().duration(350)
-    .attr("r", d => d.depth===0 ? 18 : d.depth===1 ? 13 : 8)
-    .attr("fill", d => d._children ? d.data.color+"25" : "#0d1829")
-    .attr("stroke", d => d.data.color);
-  nodeUpdate.select("text").transition().duration(350)
-    .attr("opacity",1)
-    .attr("dy", d => (d.children||d._children) ? -18 : (d.depth===0 ? -22 : 20));
-  node.exit().transition().duration(350)
-    .attr("transform", () => `translate(${source.x},${source.y})`)
-    .remove().select("circle").attr("r",0);
+  nodeUpdate.transition().duration(400)
+    .attr("transform", d => `translate(${d.x + offsetX},${d.y})`);
 
-  nodes.forEach(d => { d.x0=d.x; d.y0=d.y; });
+  nodeUpdate.select("circle:not(.node-root-ring)").transition().duration(400)
+    .attr("r", d => d.depth === 0 ? 18 : d.depth === 1 ? 13 : 8)
+    .attr("fill", d => d._children ? d.data.color + "25" : "#0d1829")
+    .attr("stroke", d => d.data.color);
+
+  nodeUpdate.select("text").transition().duration(400)
+    .attr("opacity", 1)
+    .attr("dy", d => (d.children || d._children) ? -18 : (d.depth === 0 ? -22 : 20));
+
+  node.exit().transition().duration(400)
+    .attr("transform", () => `translate(${source.x + offsetX},${source.y})`)
+    .remove();
+
+  nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
 }
 
 function diag(s, d) {
@@ -571,7 +628,6 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
 
   if (e.key === 'Enter') {
-    toggleNode(focusedNode);
     showPanel(focusedNode.data.name, focusedNode.data.color);
     markExplored(focusedNode.data.name);
   } else if (e.key === 'ArrowRight') {
@@ -596,10 +652,7 @@ document.addEventListener('keydown', e => {
   updateBreadcrumb(focusedNode.data.name);
 
   // Scroll/zoom to node
-  if (focusedNode.x !== undefined) {
-    const transform = d3.zoomIdentity.translate(svgW/2 - focusedNode.x, 200 - focusedNode.y).scale(1);
-    svg.transition().duration(300).call(zoom.transform, transform);
-  }
+  // Tree is fixed — no panning on keyboard nav
 });
 
 // ── Side Panel ─────────────────────────────────────────────────
@@ -672,20 +725,18 @@ function copyCmd(cmd) {
 
 // ── Controls ───────────────────────────────────────────────────
 function expandAll() {
-  root.each(d => { if (d._children) { d.children=d._children; d._children=null; } });
+  root.each(d => { if (d._children) { d.children = d._children; d._children = null; } });
   update(root);
 }
 
 function collapseAll() {
-  root.children && root.children.forEach(d => {
-    if (d.children) { d._children=d.children; d.children=null; }
-  });
+  // Collapse everything back to root only
+  root.children && root.children.forEach(collapseNode);
   update(root);
 }
 
 function resetZoom() {
-  svg.transition().duration(400)
-    .call(zoom.transform, d3.zoomIdentity.translate(0, 30).scale(1));
+  // Tree is fixed — nothing to reset
 }
 
 // ── Quiz ───────────────────────────────────────────────────────
