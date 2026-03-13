@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linux FS Tree - Top Down</title>
+
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@800&display=swap" rel="stylesheet">
+
+  <!-- Project Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────── -->
+  <header>
+    <h1>LINUX FILE SYSTEM HIERARCHY</h1>
+    <p>TOP-DOWN TREE · CLICK ANY NODE TO SEE DETAILS</p>
+  </header>
+
+  <!-- ── Controls ─────────────────────────────────────────────────── -->
+  <div id="controls">
+    <button onclick="expandAll()">▼ EXPAND ALL</button>
+    <button onclick="collapseAll()">▲ COLLAPSE ALL</button>
+    <button onclick="resetZoom()">⌂ RESET VIEW</button>
+  </div>
+
+  <!-- ── Legend ───────────────────────────────────────────────────── -->
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:#00ff88"></div> User Space</div>
+    <div class="leg"><div class="leg-dot" style="background:#00d4ff"></div> System</div>
+    <div class="leg"><div class="leg-dot" style="background:#ffd700"></div> Config</div>
+    <div class="leg"><div class="leg-dot" style="background:#ff8c42"></div> Devices</div>
+    <div class="leg"><div class="leg-dot" style="background:#ff6b9d"></div> Virtual FS</div>
+  </div>
+
+  <!-- ── D3 SVG Canvas ─────────────────────────────────────────────── -->
+  <div id="svg-container"></div>
+
+  <!-- ── Side Detail Panel ─────────────────────────────────────────── -->
+  <div id="panel">
+    <button id="panel-close" onclick="closePanel()">✕</button>
+    <div id="panel-content"></div>
+  </div>
+
+  <!-- Project Script -->
+  <script src="script.js"></script>
+
+</body>
+</html>
