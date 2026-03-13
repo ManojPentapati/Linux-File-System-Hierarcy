@@ -147,12 +147,6 @@ Learning Linux filesystem internals is one of those things that looks intimidati
 
 ---
 
-## 📄 License
-
-MIT — free to use, modify, and share.
-
----
-
 <div align="center">
   Made with 💚 while learning Linux & DevOps
 </div>
