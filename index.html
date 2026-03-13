@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Linux FS Tree - Interactive Visualizer</title>
+  <title>Linux FS Tree — Interactive Visualizer</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
@@ -11,76 +11,65 @@
 <body>
 
   <header>
-    <h1>LINUX FILE SYSTEM HIERARCHY</h1>
-    <p>TOP-DOWN TREE · CLICK ANY NODE TO SEE DETAILS</p>
+    <div id="header-left">
+      <div id="progress-badge" title="Directories explored">
+        <span id="progress-count">0</span><span style="color:#3a5a7a">/</span><span id="progress-total">15</span>
+        <div id="progress-label">EXPLORED</div>
+      </div>
+    </div>
+    <div id="header-center">
+      <h1>LINUX FILE SYSTEM HIERARCHY</h1>
+      <p>TOP-DOWN TREE · CLICK ANY NODE TO EXPLORE</p>
+    </div>
+    <div id="header-right">
+      <button id="theme-btn" onclick="toggleTheme()" title="Toggle theme">☀</button>
+      <button id="export-btn" onclick="exportSVG()">⬇ EXPORT</button>
+      <button id="share-btn" onclick="openShare()">↗ SHARE</button>
+    </div>
   </header>
 
-  <!-- Stats Bar -->
   <div id="stats-bar">
-    <div class="stat-item">
-      <div class="stat-num" id="stat-total">0</div>
-      <div class="stat-label">DIRECTORIES</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" style="color:#ff6b9d" id="stat-root-only">0</div>
-      <div class="stat-label">ROOT ONLY</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" style="color:#00ff88" id="stat-user">0</div>
-      <div class="stat-label">USER ACCESS</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" style="color:#ffd700" id="stat-virtual">0</div>
-      <div class="stat-label">VIRTUAL FS</div>
-    </div>
+    <div class="stat-item"><div class="stat-num" id="stat-total">0</div><div class="stat-label">DIRECTORIES</div></div>
+    <div class="stat-item"><div class="stat-num" style="color:#ff6b9d" id="stat-root-only">0</div><div class="stat-label">ROOT ONLY</div></div>
+    <div class="stat-item"><div class="stat-num" style="color:#00ff88" id="stat-user">0</div><div class="stat-label">USER ACCESS</div></div>
+    <div class="stat-item"><div class="stat-num" style="color:#ffd700" id="stat-virtual">0</div><div class="stat-label">VIRTUAL FS</div></div>
+    <div class="stat-item"><div class="stat-num" style="color:#9a70ff" id="stat-explored">0</div><div class="stat-label">EXPLORED</div></div>
   </div>
 
-  <!-- Search Bar -->
   <div id="search-container">
     <div id="search-wrap">
       <span id="search-icon">⌕</span>
-      <input type="text" id="search-input" placeholder="Search directories... (e.g. logs, config, kernel)" autocomplete="off"/>
+      <input type="text" id="search-input" placeholder="Search directories… (e.g. logs, config, kernel)" autocomplete="off"/>
+      <kbd id="search-hint">⌘K</kbd>
       <button id="search-clear" onclick="clearSearch()" style="display:none">✕</button>
     </div>
     <div id="search-results"></div>
   </div>
 
-  <!-- Breadcrumb -->
-  <div id="breadcrumb">
-    <span id="breadcrumb-text">/ root</span>
-  </div>
+  <div id="breadcrumb"><span id="breadcrumb-text">Select a node to begin exploring</span></div>
 
-  <!-- Controls -->
   <div id="controls">
     <button onclick="expandAll()">▼ EXPAND ALL</button>
     <button onclick="collapseAll()">▲ COLLAPSE ALL</button>
-    <button onclick="resetZoom()">⌂ RESET VIEW</button>
-    <button id="quiz-btn" onclick="startQuiz()">🎯 QUIZ MODE</button>
+    <button id="quiz-btn"       onclick="startQuiz()">🎯 QUIZ MODE</button>
+    <button id="interview-btn"  onclick="startInterview()">⏱ INTERVIEW</button>
+    <button id="compare-btn"    onclick="openCompare()">⇄ COMPARE</button>
+    <button id="cheatsheet-btn" onclick="openCheatsheet()">📋 CHEATSHEET</button>
   </div>
 
-  <!-- Legend -->
+  <div id="kb-hint">
+    <span>← → navigate depth</span><span>↑ ↓ siblings</span><span>Enter expand</span><span>Esc close</span>
+  </div>
+
   <div class="legend">
-    <div class="leg" onclick="filterByCategory('user')" style="cursor:pointer">
-      <div class="leg-dot" style="background:#00ff88"></div> User Space
-    </div>
-    <div class="leg" onclick="filterByCategory('system')" style="cursor:pointer">
-      <div class="leg-dot" style="background:#00d4ff"></div> System
-    </div>
-    <div class="leg" onclick="filterByCategory('config')" style="cursor:pointer">
-      <div class="leg-dot" style="background:#ffd700"></div> Config
-    </div>
-    <div class="leg" onclick="filterByCategory('devices')" style="cursor:pointer">
-      <div class="leg-dot" style="background:#ff8c42"></div> Devices
-    </div>
-    <div class="leg" onclick="filterByCategory('virtual')" style="cursor:pointer">
-      <div class="leg-dot" style="background:#ff6b9d"></div> Virtual FS
-    </div>
-    <div class="leg" onclick="filterByCategory(null)" style="cursor:pointer">
-      <div class="leg-dot" style="background:#5a7a9a"></div> Show All
-    </div>
+    <div class="leg" onclick="filterByCategory('user')"    style="cursor:pointer"><div class="leg-dot" style="background:#00ff88"></div>User Space</div>
+    <div class="leg" onclick="filterByCategory('system')"  style="cursor:pointer"><div class="leg-dot" style="background:#00d4ff"></div>System</div>
+    <div class="leg" onclick="filterByCategory('config')"  style="cursor:pointer"><div class="leg-dot" style="background:#ffd700"></div>Config</div>
+    <div class="leg" onclick="filterByCategory('devices')" style="cursor:pointer"><div class="leg-dot" style="background:#ff8c42"></div>Devices</div>
+    <div class="leg" onclick="filterByCategory('virtual')" style="cursor:pointer"><div class="leg-dot" style="background:#ff6b9d"></div>Virtual FS</div>
+    <div class="leg" onclick="filterByCategory(null)"      style="cursor:pointer"><div class="leg-dot" style="background:#5a7a9a"></div>Show All</div>
   </div>
 
-  <!-- SVG -->
   <div id="svg-container"></div>
 
   <!-- Side Panel -->
@@ -109,9 +98,80 @@
     </div>
   </div>
 
-  <!-- Toast -->
-  <div id="toast"></div>
+  <!-- Interview Mode Modal -->
+  <div id="interview-overlay">
+    <div id="interview-modal">
+      <div id="interview-header">
+        <span style="font-family:'Orbitron',monospace;color:#ffd700;font-size:0.8rem;letter-spacing:2px">⏱ INTERVIEW MODE</span>
+        <div id="interview-timer-ring">
+          <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="#1a3050" stroke-width="3"/><circle id="timer-arc" cx="25" cy="25" r="20" fill="none" stroke="#ffd700" stroke-width="3" stroke-dasharray="125.66" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 25 25)"/></svg>
+          <span id="interview-timer">10</span>
+        </div>
+        <button onclick="exitInterview()">✕</button>
+      </div>
+      <div id="interview-q"></div>
+      <button id="interview-reveal-btn" onclick="revealAnswer()">▶ REVEAL ANSWER</button>
+      <div id="interview-answer" style="display:none"></div>
+      <div id="interview-actions" style="display:none">
+        <button class="iv-act iv-easy" onclick="ivResult('easy')">✅ Got it</button>
+        <button class="iv-act iv-hard" onclick="ivResult('hard')">🤔 Shaky</button>
+        <button class="iv-act iv-miss" onclick="ivResult('miss')">❌ Missed</button>
+      </div>
+      <div id="interview-progress-row">
+        <span style="color:#00ff88">✅ <span id="iv-easy">0</span></span>
+        <span style="color:#ffd700">🤔 <span id="iv-hard">0</span></span>
+        <span style="color:#ff6b9d">❌ <span id="iv-miss">0</span></span>
+        <span style="color:#5a8aaa">Remaining: <span id="iv-remaining">0</span></span>
+      </div>
+    </div>
+  </div>
 
+  <!-- Compare Modal -->
+  <div id="compare-overlay">
+    <div id="compare-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <span style="font-family:'Orbitron',monospace;color:#00d4ff;font-size:0.8rem;letter-spacing:2px">⇄ COMPARE DIRECTORIES</span>
+        <button onclick="closeCompare()">✕</button>
+      </div>
+      <div id="compare-selects">
+        <select id="cmp-a" onchange="renderCompare()"></select>
+        <span style="color:#5a8aaa;font-size:1.2rem">⇄</span>
+        <select id="cmp-b" onchange="renderCompare()"></select>
+      </div>
+      <div id="compare-body"></div>
+    </div>
+  </div>
+
+  <!-- Cheatsheet Modal -->
+  <div id="cheatsheet-overlay">
+    <div id="cheatsheet-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-family:'Orbitron',monospace;color:#ffd700;font-size:0.8rem;letter-spacing:2px">📋 COMMAND CHEATSHEET</span>
+        <div style="display:flex;gap:8px">
+          <button onclick="printCheatsheet()">🖨 PRINT</button>
+          <button onclick="closeCheatsheet()">✕</button>
+        </div>
+      </div>
+      <div id="cheatsheet-body"></div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div id="share-overlay">
+    <div id="share-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <span style="font-family:'Orbitron',monospace;color:#00ff88;font-size:0.8rem;letter-spacing:2px">↗ SHARE PROGRESS</span>
+        <button onclick="closeShare()">✕</button>
+      </div>
+      <div id="share-text-box"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="copyShareText()" style="flex:1;border-color:#00ff88;color:#00ff88">📋 COPY</button>
+        <button onclick="closeShare()">DONE</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
   <script src="script.js"></script>
 </body>
 </html>
